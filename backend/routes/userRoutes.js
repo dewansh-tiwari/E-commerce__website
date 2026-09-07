@@ -1,6 +1,6 @@
 import express from 'express';
-import User from '../models/User.js';
-import Notification from '../models/Notification.js';
+import bcrypt from 'bcryptjs';
+import { supabase } from '../config/supabase.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -8,28 +8,42 @@ const router = express.Router();
 // Update Profile
 router.put('/profile', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    user.name = req.body.name || user.name;
-    user.phone = req.body.phone || user.phone;
+    const updates = {};
+    if (req.body.name) updates.name = req.body.name;
+    if (req.body.phone !== undefined) updates.phone = req.body.phone;
 
     if (req.body.password) {
       if (!/^\d{9}$/.test(req.body.password)) {
         return res.status(400).json({ message: 'Password must be exactly 9 digits (e.g. 123456789)' });
       }
-      user.password = req.body.password;
+      const salt = await bcrypt.genSalt(10);
+      updates.password_hash = await bcrypt.hash(req.body.password, salt);
     }
 
-    const updatedUser = await user.save();
+    updates.updated_at = new Date().toISOString();
+
+    const { data: updatedUser, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', req.user.id)
+      .select()
+      .single();
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    const { data: addresses } = await supabase
+      .from('user_addresses')
+      .select('*')
+      .eq('user_id', updatedUser.id);
+
     res.json({
-      _id: updatedUser._id,
+      _id: updatedUser.id,
       name: updatedUser.name,
       email: updatedUser.email,
       phone: updatedUser.phone,
       role: updatedUser.role,
       coins: updatedUser.coins,
-      addresses: updatedUser.addresses
+      addresses: addresses || []
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -40,28 +54,38 @@ router.put('/profile', protect, async (req, res) => {
 router.post('/addresses', protect, async (req, res) => {
   try {
     const { title, name, phone, street, apartment, city, state, zipCode, isDefault } = req.body;
-    const user = await User.findById(req.user._id);
 
     if (isDefault) {
-      user.addresses.forEach((addr) => (addr.isDefault = false));
+      await supabase
+        .from('user_addresses')
+        .update({ is_default: false })
+        .eq('user_id', req.user.id);
     }
 
-    const newAddress = {
-      title: title || 'Home',
-      name: name || user.name,
-      phone: phone || user.phone,
-      street,
-      apartment: apartment || '',
-      city,
-      state,
-      zipCode,
-      isDefault: isDefault || user.addresses.length === 0
-    };
+    const { error: insertErr } = await supabase
+      .from('user_addresses')
+      .insert({
+        user_id: req.user.id,
+        title: title || 'Home',
+        name: name || req.user.name,
+        phone: phone || req.user.phone,
+        street: street || '',
+        apartment: apartment || '',
+        city: city || '',
+        state: state || '',
+        zip_code: zipCode || '',
+        is_default: Boolean(isDefault)
+      });
 
-    user.addresses.push(newAddress);
-    await user.save();
+    if (insertErr) return res.status(500).json({ message: insertErr.message });
 
-    res.status(201).json(user.addresses);
+    const { data: addresses } = await supabase
+      .from('user_addresses')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('is_default', { ascending: false });
+
+    res.status(201).json(addresses || []);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -70,10 +94,20 @@ router.post('/addresses', protect, async (req, res) => {
 // Delete Address
 router.delete('/addresses/:addressId', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    user.addresses = user.addresses.filter(addr => addr._id.toString() !== req.params.addressId);
-    await user.save();
-    res.json(user.addresses);
+    const { error } = await supabase
+      .from('user_addresses')
+      .delete()
+      .eq('id', req.params.addressId)
+      .eq('user_id', req.user.id);
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    const { data: addresses } = await supabase
+      .from('user_addresses')
+      .select('*')
+      .eq('user_id', req.user.id);
+
+    res.json(addresses || []);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -82,30 +116,49 @@ router.delete('/addresses/:addressId', protect, async (req, res) => {
 // Gamification: Daily SuperCoins Claim
 router.post('/daily-claim', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    const now = new Date();
+    // Try Supabase RPC first
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('claim_daily_supercoins', {
+      p_user_id: req.user.id
+    });
 
-    if (user.lastDailyClaim) {
-      const lastClaim = new Date(user.lastDailyClaim);
-      const isSameDay = lastClaim.toDateString() === now.toDateString();
-      if (isSameDay) {
-        return res.status(400).json({ message: 'You have already claimed today\'s daily reward! Check back tomorrow.' });
+    if (!rpcErr && rpcData) {
+      if (!rpcData.success) {
+        return res.status(400).json({ message: rpcData.message });
+      }
+      return res.json({ message: rpcData.message, coins: rpcData.coins });
+    }
+
+    // Fallback: Check and claim via direct query
+    const { data: user } = await supabase
+      .from('users')
+      .select('coins, last_daily_claim')
+      .eq('id', req.user.id)
+      .single();
+
+    const now = new Date();
+    if (user.last_daily_claim) {
+      const lastClaim = new Date(user.last_daily_claim);
+      if (lastClaim.toDateString() === now.toDateString()) {
+        return res.status(400).json({ message: "You have already claimed today's daily reward! Check back tomorrow." });
       }
     }
 
     const rewardCoins = 50;
-    user.coins += rewardCoins;
-    user.lastDailyClaim = now;
-    await user.save();
+    const newCoins = (user.coins || 0) + rewardCoins;
 
-    await Notification.create({
-      user: user._id,
+    await supabase
+      .from('users')
+      .update({ coins: newCoins, last_daily_claim: now.toISOString() })
+      .eq('id', req.user.id);
+
+    await supabase.from('notifications').insert({
+      user_id: req.user.id,
       title: 'Daily Reward Claimed! 🪙',
-      message: `You received +${rewardCoins} SuperCoins for logging in today! Total balance: ${user.coins} Coins.`,
+      message: `You received +${rewardCoins} SuperCoins for logging in today! Total balance: ${newCoins} Coins.`,
       type: 'reward'
     });
 
-    res.json({ message: `Successfully claimed +${rewardCoins} SuperCoins!`, coins: user.coins });
+    res.json({ message: `Successfully claimed +${rewardCoins} SuperCoins!`, coins: newCoins });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -114,8 +167,25 @@ router.post('/daily-claim', protect, async (req, res) => {
 // Wishlist operations
 router.get('/wishlist', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('wishlist');
-    res.json(user.wishlist || []);
+    const { data: wishlistEntries, error } = await supabase
+      .from('user_wishlist')
+      .select('product_id, products(*)')
+      .eq('user_id', req.user.id);
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    const products = (wishlistEntries || [])
+      .map(entry => entry.products)
+      .filter(Boolean)
+      .map(p => ({
+        ...p,
+        _id: p.id,
+        originalPrice: Number(p.original_price),
+        discountPercent: p.discount_percent,
+        reviewCount: p.review_count
+      }));
+
+    res.json(products);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -123,21 +193,50 @@ router.get('/wishlist', protect, async (req, res) => {
 
 router.post('/wishlist/:productId', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
     const productId = req.params.productId;
 
-    const index = user.wishlist.indexOf(productId);
+    // Check if already in wishlist
+    const { data: existing } = await supabase
+      .from('user_wishlist')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .eq('product_id', productId)
+      .single();
+
     let action = 'added';
-    if (index > -1) {
-      user.wishlist.splice(index, 1);
+    if (existing) {
+      await supabase
+        .from('user_wishlist')
+        .delete()
+        .eq('user_id', req.user.id)
+        .eq('product_id', productId);
       action = 'removed';
     } else {
-      user.wishlist.push(productId);
+      await supabase
+        .from('user_wishlist')
+        .insert({
+          user_id: req.user.id,
+          product_id: productId
+        });
     }
 
-    await user.save();
-    const updatedUser = await User.findById(req.user._id).populate('wishlist');
-    res.json({ action, wishlist: updatedUser.wishlist });
+    // Return updated wishlist
+    const { data: wishlistEntries } = await supabase
+      .from('user_wishlist')
+      .select('product_id, products(*)')
+      .eq('user_id', req.user.id);
+
+    const wishlist = (wishlistEntries || [])
+      .map(entry => entry.products)
+      .filter(Boolean)
+      .map(p => ({
+        ...p,
+        _id: p.id,
+        originalPrice: Number(p.original_price),
+        discountPercent: p.discount_percent
+      }));
+
+    res.json({ action, wishlist });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -146,8 +245,23 @@ router.post('/wishlist/:productId', protect, async (req, res) => {
 // Get User Notifications
 router.get('/notifications', protect, async (req, res) => {
   try {
-    const notifications = await Notification.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(20);
-    res.json(notifications);
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) return res.status(500).json({ message: error.message });
+
+    const formatted = (notifications || []).map(n => ({
+      ...n,
+      _id: n.id,
+      isRead: n.is_read,
+      createdAt: n.created_at
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

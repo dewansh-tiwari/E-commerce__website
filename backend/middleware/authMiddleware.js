@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/User.js';
+import { supabase } from '../config/supabase.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'freshkart_secret_jwt_key_2026_production';
 
@@ -9,13 +9,28 @@ export const protect = async (req, res, next) => {
     try {
       token = req.headers.authorization.split(' ')[1];
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-      if (!req.user) {
+
+      // Fetch user profile from Supabase
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('id, name, email, phone, role, status, coins, store_name, gst_number, business_type, created_at')
+        .eq('id', decoded.id)
+        .single();
+
+      if (error || !user) {
         return res.status(401).json({ message: 'User not found or token invalid' });
       }
-      if (req.user.status === 'blocked') {
+
+      if (user.status === 'blocked') {
         return res.status(403).json({ message: 'Account has been blocked. Please contact support.' });
       }
+
+      // Map id and _id for compatibility
+      req.user = {
+        ...user,
+        _id: user.id
+      };
+
       next();
     } catch (error) {
       return res.status(401).json({ message: 'Not authorized, token failed' });

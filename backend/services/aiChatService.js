@@ -1,6 +1,4 @@
-import Order from '../models/Order.js';
-import Product from '../models/Product.js';
-import User from '../models/User.js';
+import { supabase, isSupabaseConfigured } from '../config/supabase.js';
 
 export const processChatMessage = async ({ message, history = [], context = {}, userId = null }) => {
   const query = (message || '').trim();
@@ -9,19 +7,36 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   // 1. Fetch authenticated user data if available
   let currentUser = null;
   let userOrders = [];
-  if (userId) {
+  if (userId && isSupabaseConfigured) {
     try {
-      currentUser = await User.findById(userId).select('-password');
-      userOrders = await Order.find({ user: userId }).sort({ createdAt: -1 }).limit(5);
+      const { data: user } = await supabase
+        .from('users')
+        .select('id, name, email, coins')
+        .eq('id', userId)
+        .single();
+      currentUser = user;
+
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(5);
+      userOrders = orders || [];
     } catch (e) {
       console.error('Error fetching user context:', e);
     }
   }
 
-  // Also check if any order exists in the DB if demo/guest user
-  if (userOrders.length === 0) {
+  // Fallback demo order if guest/no orders
+  if (userOrders.length === 0 && isSupabaseConfigured) {
     try {
-      userOrders = await Order.find({}).sort({ createdAt: -1 }).limit(3);
+      const { data: fallbackOrders } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .order('created_at', { ascending: false })
+        .limit(3);
+      userOrders = fallbackOrders || [];
     } catch (e) {
       console.error('Error fetching fallback orders:', e);
     }
@@ -41,45 +56,44 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   // INTENT A: ORDER TRACKING
   // ─────────────────────────────────────────────────────────────
   if (isTracking && !isRefundOrDamage) {
-    // Check if a specific orderId is provided in text, e.g. ORD... or BM-...
-    const orderIdMatch = query.match(/(ORD\w+|BM-\w+|\b[A-Za-z0-9]{8,24}\b)/i);
+    const orderIdMatch = query.match(/(ORD\w+|BM-\w+|\b[A-Za-z0-9]{6,24}\b)/i);
     let targetOrder = latestOrder;
 
-    if (orderIdMatch) {
-      const searchedOrder = await Order.findOne({ 
-        $or: [
-          { orderId: new RegExp(orderIdMatch[0], 'i') },
-          { _id: orderIdMatch[0].length === 24 ? orderIdMatch[0] : null }
-        ].filter(Boolean)
-      });
-      if (searchedOrder) targetOrder = searchedOrder;
+    if (orderIdMatch && isSupabaseConfigured) {
+      const { data: searched } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .or(`order_id.ilike.%${orderIdMatch[0]}%`)
+        .limit(1)
+        .single();
+      if (searched) targetOrder = searched;
     }
 
     if (targetOrder) {
-      const status = targetOrder.orderStatus || 'Out for Delivery';
-      const eta = targetOrder.estimatedDeliveryTime || '15-20 minutes';
-      const rider = targetOrder.driverInfo?.name || 'Ramesh Kumar';
-      const vehicle = targetOrder.driverInfo?.vehicleNumber || 'MH 02 EV 4092';
-      const phone = targetOrder.driverInfo?.phone || '+91 98765 43210';
-      const itemCount = targetOrder.items?.length || 1;
+      const status = targetOrder.order_status || 'Out for Delivery';
+      const eta = targetOrder.estimated_delivery_time || '15-20 minutes';
+      const rider = targetOrder.driver_info?.name || 'Ramesh Kumar';
+      const vehicle = targetOrder.driver_info?.vehicleNumber || 'MH 02 EV 4092';
+      const phone = targetOrder.driver_info?.phone || '+91 98765 43210';
+      const itemsList = targetOrder.order_items || [];
 
       return {
-        reply: `Here is the real-time status of your order **#${targetOrder.orderId}**:\n\n` +
+        reply: `Here is the real-time status of your order **#${targetOrder.order_id}**:\n\n` +
                `• **Current Status:** ${status === 'Delivered' ? '✅ Delivered' : '🚚 ' + status}\n` +
                `• **Estimated Arrival:** ${eta}\n` +
                `• **Delivery Partner:** ${rider} (${vehicle})\n` +
                `• **Contact:** ${phone}\n` +
-               `• **Total Items:** ${itemCount} items (₹${targetOrder.totalAmount})\n\n` +
+               `• **Total Items:** ${itemsList.length} items (₹${targetOrder.total_amount})\n\n` +
                `Your delivery partner is taking optimal express routes to reach you on time!`,
         intent: 'TRACK_ORDER',
         orderData: {
-          orderId: targetOrder.orderId,
+          orderId: targetOrder.order_id,
           orderStatus: status,
           estimatedDeliveryTime: eta,
-          totalAmount: targetOrder.totalAmount,
-          itemsCount: targetOrder.items?.length || 0,
-          driverInfo: targetOrder.driverInfo,
-          items: targetOrder.items?.slice(0, 3) || []
+          totalAmount: Number(targetOrder.total_amount),
+          itemsCount: itemsList.length,
+          driverInfo: targetOrder.driver_info,
+          items: itemsList.slice(0, 3)
         },
         suggestions: ['Call Delivery Partner 📞', 'Add Delivery Instructions 🚪', 'Check Other Orders 📦', 'Help with Items 💔']
       };
@@ -93,22 +107,22 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   }
 
   // ─────────────────────────────────────────────────────────────
-  // INTENT B: DELIVERY ISSUES & INSTRUCTIONS
+  // INTENT B: DELIVERY ISSUES
   // ─────────────────────────────────────────────────────────────
   if (isDeliveryIssue && !isRefundOrDamage) {
     if (latestOrder) {
       return {
-        reply: `I understand you have a question about delivery for order **#${latestOrder.orderId}**.\n\n` +
-               `• **Current ETA:** ${latestOrder.estimatedDeliveryTime || '15-20 minutes'}\n` +
-               `• **Driver:** ${latestOrder.driverInfo?.name || 'Ramesh Kumar'} (${latestOrder.driverInfo?.phone || '+91 98765 43210'})\n\n` +
+        reply: `I understand you have a question about delivery for order **#${latestOrder.order_id}**.\n\n` +
+               `• **Current ETA:** ${latestOrder.estimated_delivery_time || '15-20 minutes'}\n` +
+               `• **Driver:** ${latestOrder.driver_info?.name || 'Ramesh Kumar'} (${latestOrder.driver_info?.phone || '+91 98765 43210'})\n\n` +
                `📍 **Special Delivery Notes Recorded:**\n` +
                `- Contactless Doorstep Delivery\n` +
                `- Please call upon arrival at the gate\n\n` +
                `If your order is delayed past the estimated window, we will automatically credit **50 SuperCoins** as our On-Time Delivery Guarantee!`,
         intent: 'DELIVERY_ISSUE',
         orderData: {
-          orderId: latestOrder.orderId,
-          driverInfo: latestOrder.driverInfo
+          orderId: latestOrder.order_id,
+          driverInfo: latestOrder.driver_info
         },
         suggestions: ['Call Rider Directly 📞', 'Leave at Doorstep 🚪', 'I Want a Refund 💔', 'Track on Map 🗺️']
       };
@@ -122,44 +136,53 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   }
 
   // ─────────────────────────────────────────────────────────────
-  // INTENT C: REFUND, DAMAGED OR MISSING ITEMS (QUICK RESOLUTION)
+  // INTENT C: REFUND / DAMAGE RESOLUTION
   // ─────────────────────────────────────────────────────────────
   if (isRefundOrDamage) {
-    const refundOrder = latestOrder || {
-      orderId: 'BM-EXPRESS-902',
-      totalAmount: 349,
-      items: [{ name: 'Amul Taaza Milk 500ml', price: 27 }, { name: "Lay's Cream & Onion", price: 20 }]
-    };
-
-    // Calculate simulated instant resolution amount
-    const affectedItem = refundOrder.items?.[0] || { name: 'Reported Item', price: 50 };
-    const refundAmount = affectedItem.price || 50;
+    const refundOrderId = latestOrder?.order_id || 'BM-EXPRESS-902';
+    const affectedItemName = latestOrder?.order_items?.[0]?.name || 'Fresh Item';
+    const refundAmount = Number(latestOrder?.order_items?.[0]?.price || 50);
     const refundReference = `REF-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // If user is authenticated, add SuperCoins / wallet credit
     if (currentUser) {
       try {
-        currentUser.coins = (currentUser.coins || 0) + refundAmount;
-        await currentUser.save();
+        // Try RPC
+        const { error: rpcErr } = await supabase.rpc('credit_user_wallet_refund', {
+          p_user_id: currentUser.id,
+          p_amount: refundAmount,
+          p_reason: `Damaged item refund for #${refundOrderId}`
+        });
+
+        if (rpcErr) {
+          // Direct fallback
+          const newCoins = (currentUser.coins || 0) + refundAmount;
+          await supabase.from('users').update({ coins: newCoins }).eq('id', currentUser.id);
+          await supabase.from('notifications').insert({
+            user_id: currentUser.id,
+            title: 'Wallet Refund Credited! 💰',
+            message: `₹${refundAmount} (${refundAmount} SuperCoins) credited to your wallet for: Damaged item refund for #${refundOrderId}`,
+            type: 'reward'
+          });
+        }
       } catch (e) {
-        console.error('Error updating user coins for refund:', e);
+        console.error('Error crediting user refund coins:', e);
       }
     }
 
     return {
       reply: `I am deeply sorry you had an issue with your items! At **Big Market**, your satisfaction is 100% guaranteed under our **No-Questions-Asked Freshness Promise**.\n\n` +
              `✅ **Resolution Approved Instantly:**\n` +
-             `• **Order Reference:** #${refundOrder.orderId}\n` +
-             `• **Affected Item:** ${affectedItem.name}\n` +
+             `• **Order Reference:** #${refundOrderId}\n` +
+             `• **Affected Item:** ${affectedItemName}\n` +
              `• **Refund ID:** \`${refundReference}\`\n` +
              `• **Refund Amount:** ₹${refundAmount} credited immediately to your **Big Market Wallet / SuperCoins**!\n\n` +
              `You do not need to return the damaged item. Your updated wallet balance is ready to use on your next order!`,
       intent: 'REFUND_ISSUE',
       refundData: {
-        orderId: refundOrder.orderId,
+        orderId: refundOrderId,
         refundReference,
         refundAmount,
-        itemName: affectedItem.name,
+        itemName: affectedItemName,
         status: 'Processed & Credited'
       },
       suggestions: ['Check Wallet Balance 💰', 'Track Other Orders 📦', 'Continue Shopping 🛒', 'Chat with Human Agent 💬']
@@ -167,7 +190,7 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   }
 
   // ─────────────────────────────────────────────────────────────
-  // INTENT D: OFFERS, COUPONS & SUPERCOINS
+  // INTENT D: OFFERS & COUPONS
   // ─────────────────────────────────────────────────────────────
   if (isOfferOrCoupon) {
     const coinsBalance = currentUser?.coins ?? 450;
@@ -204,50 +227,50 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   }
 
   // ─────────────────────────────────────────────────────────────
-  // INTENT F: PRODUCT QUERIES & RECOMMENDATIONS (LIVE DB LOOKUP)
+  // INTENT F: PRODUCT CATALOG SEARCH
   // ─────────────────────────────────────────────────────────────
   const cleanTerms = lower
     .replace(/(please|can\s+you|find|give|me|show|recommend|suggest|search|what\s+are|some|best|cheap|good|items?|products?|want|buy|options?|in\s+stock|available)/g, ' ')
     .trim();
 
   let matchedProducts = [];
-  if (cleanTerms.length >= 2) {
+  if (cleanTerms.length >= 2 && isSupabaseConfigured) {
     try {
-      const searchRegex = new RegExp(cleanTerms.split(/\s+/).filter(w => w.length > 2).join('|') || cleanTerms, 'i');
-      matchedProducts = await Product.find({
-        $or: [
-          { name: searchRegex },
-          { brand: searchRegex },
-          { category: searchRegex },
-          { subCategory: searchRegex },
-          { description: searchRegex }
-        ]
-      }).limit(4);
+      const searchPattern = `%${cleanTerms}%`;
+      const { data: prods } = await supabase
+        .from('products')
+        .select('*')
+        .or(`name.ilike.${searchPattern},brand.ilike.${searchPattern},category.ilike.${searchPattern},description.ilike.${searchPattern}`)
+        .limit(4);
+      matchedProducts = prods || [];
     } catch (e) {
-      console.error('Error finding matching products:', e);
+      console.error('Error finding matching products in Supabase:', e);
     }
   }
 
-  // Fallback if no specific products matched or terms were generic
-  if (matchedProducts.length === 0 && (cleanTerms.includes('milk') || cleanTerms.includes('biscuit') || cleanTerms.includes('chip') || cleanTerms.includes('oil') || cleanTerms.includes('snack'))) {
-    matchedProducts = await Product.find({}).limit(4);
+  if (matchedProducts.length === 0 && isSupabaseConfigured && (cleanTerms.includes('milk') || cleanTerms.includes('biscuit') || cleanTerms.includes('chip') || cleanTerms.includes('oil') || cleanTerms.includes('snack'))) {
+    const { data: fallbackProds } = await supabase.from('products').select('*').limit(4);
+    matchedProducts = fallbackProds || [];
   }
 
   if (matchedProducts.length > 0) {
-    const productNames = matchedProducts.map(p => `• **${p.name}** (${p.weight}) — ₹${p.price} ${p.originalPrice > p.price ? `~~₹${p.originalPrice}~~` : ''}`).join('\n');
+    const productNames = matchedProducts
+      .map(p => `• **${p.name}** (${p.weight}) — ₹${p.price} ${Number(p.original_price) > Number(p.price) ? `~~₹${p.original_price}~~` : ''}`)
+      .join('\n');
+
     return {
       reply: `Here are the top matches from our catalog for you:\n\n${productNames}\n\nYou can tap **+ Add to Cart** directly on any item below to add it immediately!`,
       intent: 'PRODUCT_INQUIRY',
       products: matchedProducts.map(p => ({
-        _id: p._id,
+        _id: p.id,
         name: p.name,
         brand: p.brand,
-        price: p.price,
-        originalPrice: p.originalPrice,
+        price: Number(p.price),
+        originalPrice: Number(p.original_price),
         image: p.images?.[0] || '/products/official/amul-milk.jpg',
         weight: p.weight,
         category: p.category,
-        rating: p.rating
+        rating: Number(p.rating)
       })),
       suggestions: ['Track My Order 🚚', 'View Cart 🛒', 'Check Deals 🏷️', 'Other Recommendations ✨']
     };
@@ -257,7 +280,7 @@ export const processChatMessage = async ({ message, history = [], context = {}, 
   // INTENT G: GREETINGS & DEFAULT CONVERSATIONAL ASSISTANT
   // ─────────────────────────────────────────────────────────────
   const greetingName = currentUser?.name ? `, ${currentUser.name.split(' ')[0]}` : '';
-  
+
   return {
     reply: isGreeting
       ? `Hello${greetingName}! 👋 I'm **Big Market AI**, your 24/7 personal shopping and delivery assistant.\n\n` +
@@ -286,10 +309,17 @@ export const getQuickActions = async (userId = null) => {
 
   if (userId) {
     try {
-      const order = await Order.findOne({ user: userId }).sort({ createdAt: -1 });
-      if (order && order.orderStatus !== 'Delivered' && order.orderStatus !== 'Cancelled') {
+      const { data: order } = await supabase
+        .from('orders')
+        .select('order_id, order_status')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (order && order.order_status !== 'Delivered' && order.order_status !== 'Cancelled') {
         hasActiveOrder = true;
-        latestOrderId = order.orderId;
+        latestOrderId = order.order_id;
       }
     } catch (e) {
       console.error(e);

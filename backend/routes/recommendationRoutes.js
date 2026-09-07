@@ -1,7 +1,18 @@
 import express from 'express';
-import Product from '../models/Product.js';
+import { supabase } from '../config/supabase.js';
 
 const router = express.Router();
+
+const formatProduct = (p) => {
+  if (!p) return null;
+  return {
+    ...p,
+    _id: p.id,
+    originalPrice: Number(p.original_price),
+    discountPercent: p.discount_percent,
+    reviewCount: p.review_count
+  };
+};
 
 // Get AI recommendations
 router.get('/', async (req, res) => {
@@ -12,32 +23,51 @@ router.get('/', async (req, res) => {
     let frequentlyBoughtTogether = [];
     let similarProducts = [];
 
-    // Recommended for you (High rating & best sellers)
-    recommendedForYou = await Product.find({ isBestSeller: true }).limit(8);
+    // 1. Recommended for you (Best sellers & top ratings)
+    const { data: bestSellers } = await supabase
+      .from('products')
+      .select('*')
+      .eq('is_bestseller', true)
+      .limit(8);
+
+    recommendedForYou = (bestSellers || []).map(formatProduct);
+
     if (recommendedForYou.length < 8) {
-      const extra = await Product.find({ rating: { $gte: 4.5 } }).limit(8 - recommendedForYou.length);
-      recommendedForYou = [...recommendedForYou, ...extra];
+      const { data: topRated } = await supabase
+        .from('products')
+        .select('*')
+        .gte('rating', 4.5)
+        .limit(8 - recommendedForYou.length);
+
+      const formattedTop = (topRated || []).map(formatProduct);
+      recommendedForYou = [...recommendedForYou, ...formattedTop];
     }
 
+    // 2. Similar products
     if (category) {
-      similarProducts = await Product.find({ category, _id: { $ne: productId } }).limit(6);
+      let simQuery = supabase.from('products').select('*').eq('category', category);
+      if (productId) {
+        simQuery = simQuery.neq('id', productId);
+      }
+      const { data: similar } = await simQuery.limit(6);
+      similarProducts = (similar || []).map(formatProduct);
     }
 
+    // 3. Frequently bought together
     if (productId) {
-      const currentProduct = await Product.findById(productId);
-      if (currentProduct) {
-        // AI rule: find complementary products in Dairy/Bakery/Snacks
-        frequentlyBoughtTogether = await Product.find({
-          _id: { $ne: productId },
-          $or: [
-            { category: currentProduct.category },
-            { isDeal: true },
-            { isBestSeller: true }
-          ]
-        }).limit(3);
+      const { data: curr } = await supabase.from('products').select('category').eq('id', productId).single();
+      if (curr) {
+        const { data: comp } = await supabase
+          .from('products')
+          .select('*')
+          .neq('id', productId)
+          .or(`category.eq.${curr.category},is_deal.eq.true,is_bestseller.eq.true`)
+          .limit(3);
+        frequentlyBoughtTogether = (comp || []).map(formatProduct);
       }
     } else {
-      frequentlyBoughtTogether = await Product.find({ isDeal: true }).limit(4);
+      const { data: deals } = await supabase.from('products').select('*').eq('is_deal', true).limit(4);
+      frequentlyBoughtTogether = (deals || []).map(formatProduct);
     }
 
     res.json({

@@ -2,7 +2,7 @@ import os from 'os';
 
 /**
  * Advanced In-Memory Traffic Surge & Load Management System
- * Handles high traffic volume, DDoS spikes, burst requests, and monitors server health.
+ * Handles high traffic volume, burst requests, and monitors server health.
  */
 
 // In-memory traffic metrics
@@ -13,7 +13,7 @@ const trafficMetrics = {
   peakActiveRequests: 0,
   statusCodes: { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 },
   rateLimitedCount: 0,
-  recentTimestamps: [], // timestamps within the last 60 seconds
+  recentTimestamps: [],
   recentLatencies: []
 };
 
@@ -28,7 +28,6 @@ setInterval(() => {
 
 /**
  * Traffic Tracking Middleware
- * Monitors active connections, latency, status codes, and requests per second (RPS).
  */
 export const trafficTracker = (req, res, next) => {
   const startTime = Date.now();
@@ -40,7 +39,6 @@ export const trafficTracker = (req, res, next) => {
     trafficMetrics.peakActiveRequests = trafficMetrics.activeRequests;
   }
 
-  // Intercept finish to record response metrics
   res.on('finish', () => {
     trafficMetrics.activeRequests = Math.max(0, trafficMetrics.activeRequests - 1);
     const latency = Date.now() - startTime;
@@ -60,14 +58,13 @@ export const trafficTracker = (req, res, next) => {
  * Factory for In-Memory Rate Limiting
  */
 export const createRateLimiter = ({
-  windowMs = 15 * 60 * 1000, // 15 mins
+  windowMs = 15 * 60 * 1000,
   max = 100,
   message = 'Too many requests, please slow down and try again later.',
   statusCode = 429
 }) => {
-  const ipHits = new Map(); // IP -> { count, resetTime }
+  const ipHits = new Map();
 
-  // Periodic cleanup every 2 minutes
   setInterval(() => {
     const now = Date.now();
     for (const [ip, data] of ipHits.entries()) {
@@ -111,39 +108,31 @@ export const createRateLimiter = ({
   };
 };
 
-// Global API rate limiter: 600 requests per 15 minutes per IP
 export const globalTrafficLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 600,
   message: 'High traffic detected from your IP. Please pause for a moment.'
 });
 
-// Authentication rate limiter: 30 attempts per 15 minutes per IP
 export const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: 'Too many authentication attempts. For security, please wait a few minutes before trying again.'
 });
 
-// Order checkout rate limiter: 50 requests per 15 minutes per IP
 export const orderRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 50,
   message: 'Checkout traffic surge detected. Please wait a moment while your transaction is processed safely.'
 });
 
-// Catalog Cache Control header middleware to lighten server load on spikes
 export const catalogCacheControl = (req, res, next) => {
-  // Allow client & intermediate caches to serve cached catalog for 30 seconds
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'public, max-age=30, stale-while-revalidate=60');
   }
   next();
 };
 
-/**
- * Get Comprehensive Real-Time Traffic & System Health Statistics
- */
 export const getTrafficStats = () => {
   const mem = process.memoryUsage();
   const uptimeSeconds = Math.floor(process.uptime());
@@ -155,7 +144,6 @@ export const getTrafficStats = () => {
     ? Math.round(trafficMetrics.recentLatencies.reduce((a, b) => a + b, 0) / trafficMetrics.recentLatencies.length)
     : 12;
 
-  // Determine traffic status
   let trafficStatus = 'Normal';
   let badgeColor = 'emerald';
   if (requestsPerSecond > 50 || trafficMetrics.activeRequests > 40) {
