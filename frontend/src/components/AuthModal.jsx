@@ -10,6 +10,8 @@ export const AuthModal = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [accountRole, setAccountRole] = useState('customer'); // 'customer' or 'shopkeeper'
+  const [storeName, setStoreName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [detectedLocation, setDetectedLocation] = useState(null);
@@ -60,7 +62,7 @@ export const AuthModal = () => {
       if (authMode === 'login') {
         await login(email, password);
       } else {
-        await register(name, email, password, phone, detectedLocation);
+        await register(name, email, password, phone, detectedLocation, accountRole, storeName);
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Authentication failed. Please check your details.');
@@ -71,6 +73,12 @@ export const AuthModal = () => {
 
   const fillCustomerDemo = () => {
     setEmail('customer@bigmarket.com');
+    setPassword('123456789');
+    setAuthMode('login');
+  };
+
+  const fillShopkeeperDemo = () => {
+    setEmail('shopkeeper@bigmarket.com');
     setPassword('123456789');
     setAuthMode('login');
   };
@@ -111,14 +119,20 @@ export const AuthModal = () => {
         )}
 
         {/* Quick Demo Pre-fill Bar */}
-        <div className="mb-4 p-2 bg-amber-50 rounded-2xl border border-amber-200 flex items-center justify-between gap-2 text-xs">
-          <span className="font-bold text-amber-900">Quick Demo Login:</span>
-          <div className="flex gap-1.5">
+        <div className="mb-4 p-2 bg-amber-50 rounded-2xl border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <span className="font-bold text-amber-900 text-[11px]">Quick Demo Logins:</span>
+          <div className="flex gap-1.5 flex-wrap">
             <button
               onClick={fillCustomerDemo}
               className="bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg transition"
             >
               Customer
+            </button>
+            <button
+              onClick={fillShopkeeperDemo}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg transition"
+            >
+              🏪 Shopkeeper
             </button>
             <button
               onClick={fillAdminDemo}
@@ -132,6 +146,52 @@ export const AuthModal = () => {
         <form onSubmit={handleSubmit} className="space-y-3.5">
           {authMode === 'register' && (
             <>
+              {/* Account Type Selector */}
+              <div>
+                <label className="text-xs font-bold text-gray-700 block mb-1">Select Account Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAccountRole('customer')}
+                    className={`p-2 rounded-xl border text-xs font-extrabold text-left transition ${
+                      accountRole === 'customer'
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-900'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-black">🛒 Retail Customer</p>
+                    <p className="text-[10px] text-gray-500 font-normal">250 SuperCoins bonus</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAccountRole('shopkeeper')}
+                    className={`p-2 rounded-xl border text-xs font-extrabold text-left transition ${
+                      accountRole === 'shopkeeper'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-950'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    <p className="font-black text-indigo-900">🏪 Shopkeeper / B2B</p>
+                    <p className="text-[10px] text-indigo-700 font-semibold">Auto ₹500 & ₹1599 OFF</p>
+                  </button>
+                </div>
+              </div>
+
+              {accountRole === 'shopkeeper' && (
+                <div>
+                  <label className="text-xs font-bold text-indigo-900 block mb-1">Store / Kirana Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Gupta Kirana & General Store"
+                    value={storeName}
+                    onChange={(e) => setStoreName(e.target.value)}
+                    className="w-full bg-indigo-50/50 text-xs font-semibold text-gray-900 px-3.5 py-2 rounded-xl border border-indigo-200 focus:border-indigo-500 outline-none"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-gray-700 block mb-1">Full Name</label>
                 <div className="relative">

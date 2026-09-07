@@ -46,6 +46,7 @@ const orderSchema = new mongoose.Schema({
   timeline: [timelineSchema],
   subtotal: { type: Number, required: true },
   discountAmount: { type: Number, default: 0 },
+  shopkeeperDiscount: { type: Number, default: 0 },
   deliveryFee: { type: Number, default: 0 },
   taxes: { type: Number, default: 0 },
   coinsRedeemed: { type: Number, default: 0 },

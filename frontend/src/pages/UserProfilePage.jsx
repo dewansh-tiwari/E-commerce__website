@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Package, MapPin, Heart, Coins, Bell, LogOut, ShieldCheck, ChevronRight, Truck, CheckCircle2 } from 'lucide-react';
+import { User, Package, MapPin, Heart, Coins, Bell, LogOut, ShieldCheck, ChevronRight, Truck, CheckCircle2, Store } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { orderService, userService } from '../services/api';
 
 export const UserProfilePage = () => {
   const navigate = useNavigate();
-  const { user, logout, setUser, setIsAuthModalOpen } = useAuth();
+  const { user, logout, setUser, setIsAuthModalOpen, toggleShopkeeperAccount } = useAuth();
+  const [isTogglingRole, setIsTogglingRole] = useState(false);
 
   const [activeTab, setActiveTab] = useState('orders'); // 'orders', 'addresses', 'notifications', 'profile'
   const [myOrders, setMyOrders] = useState([]);
@@ -66,7 +67,14 @@ export const UserProfilePage = () => {
             {user.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black">{user.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-black">{user.name}</h1>
+              {user.role === 'shopkeeper' && (
+                <span className="bg-amber-400 text-indigo-950 font-black text-[10px] px-2.5 py-0.5 rounded-full uppercase flex items-center gap-1 shadow-xs">
+                  <Store className="w-3 h-3" /> Shopkeeper
+                </span>
+              )}
+            </div>
             <p className="text-xs text-emerald-200">{user.email} • {user.phone || 'Add phone number'}</p>
             <span className="inline-block mt-1 bg-amber-400 text-gray-950 font-extrabold text-[10px] px-2.5 py-0.5 rounded-full uppercase">
               🪙 {user.coins} SuperCoins Balance
@@ -86,31 +94,78 @@ export const UserProfilePage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Left Tabs Nav */}
-        <div className="lg:col-span-4 bg-white p-3 rounded-3xl border border-gray-100 shadow-sm space-y-1">
-          {[
-            { id: 'orders', label: 'My Orders', icon: Package },
-            { id: 'addresses', label: 'Saved Addresses', icon: MapPin },
-            { id: 'notifications', label: 'Notifications', icon: Bell },
-            { id: 'profile', label: 'Account Details', icon: User }
-          ].map((t) => {
-            const Icon = t.icon;
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-extrabold transition ${
-                  isActive ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icon className="w-4 h-4" />
-                  <span>{t.label}</span>
-                </div>
-                <ChevronRight className="w-4 h-4 opacity-70" />
-              </button>
-            );
-          })}
+        <div className="lg:col-span-4 space-y-4">
+          <div className="bg-white p-3 rounded-3xl border border-gray-100 shadow-sm space-y-1">
+            {[
+              { id: 'orders', label: 'My Orders', icon: Package },
+              { id: 'addresses', label: 'Saved Addresses', icon: MapPin },
+              { id: 'notifications', label: 'Notifications', icon: Bell },
+              { id: 'profile', label: 'Account Details', icon: User }
+            ].map((t) => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setActiveTab(t.id)}
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-extrabold transition ${
+                    isActive ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="w-4 h-4" />
+                    <span>{t.label}</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 opacity-50" />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Shopkeeper Account Upgrade / Switch Card */}
+          <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-5 rounded-3xl border border-indigo-700/50 shadow-sm space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-400 text-indigo-950 flex items-center justify-center font-black">
+                <Store className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-white">
+                  {user.role === 'shopkeeper' ? 'Shopkeeper Wholesale Active' : 'Shopkeeper Partner Program'}
+                </h4>
+                <p className="text-[10px] text-indigo-200">
+                  {user.role === 'shopkeeper' ? 'Auto-discounts applied on all orders' : 'Unlock wholesale rates for Kirana stores'}
+                </p>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-indigo-200 bg-white/5 p-3 rounded-2xl space-y-1 border border-white/10">
+              <div className="flex justify-between font-bold text-amber-300">
+                <span>Orders &gt; ₹2,999:</span>
+                <span>Flat ₹500 OFF</span>
+              </div>
+              <div className="flex justify-between font-bold text-emerald-300">
+                <span>Orders &gt; ₹9,999:</span>
+                <span>Flat ₹1,599 OFF</span>
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                try {
+                  setIsTogglingRole(true);
+                  await toggleShopkeeperAccount({ storeName: `${user.name}'s Kirana Store` });
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setIsTogglingRole(false);
+                }
+              }}
+              disabled={isTogglingRole}
+              className="w-full bg-amber-400 hover:bg-amber-300 text-indigo-950 font-black text-xs py-2.5 rounded-xl transition shadow-sm"
+            >
+              {isTogglingRole ? 'Updating Account...' : user.role === 'shopkeeper' ? 'Switch to Customer Account' : 'Upgrade to Shopkeeper Account (Free)'}
+            </button>
+          </div>
         </div>
 
         {/* Right Tab Content */}

@@ -31,8 +31,8 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
-  const register = async (name, email, password, phone, location) => {
-    const res = await authService.register({ name, email, password, phone, location });
+  const register = async (name, email, password, phone, location, role, storeName, gstNumber) => {
+    const res = await authService.register({ name, email, password, phone, location, role, storeName, gstNumber });
     setUser(res.data);
     if (location) {
       setSelectedLocation(location);
@@ -46,6 +46,18 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('freshkart_user');
   };
 
+  const toggleShopkeeperAccount = async (storeDetails = {}) => {
+    if (!user) return;
+    try {
+      const res = await authService.toggleShopkeeper(storeDetails);
+      setUser(res.data.user);
+      return res.data.user;
+    } catch (err) {
+      console.error('Failed to toggle shopkeeper account:', err);
+      throw err;
+    }
+  };
+
   const updateUserCoins = (newCoins) => {
     if (user) {
       const updated = { ...user, coins: newCoins };
@@ -53,13 +65,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const isShopkeeper = user?.role === 'shopkeeper';
+
   return (
     <AuthContext.Provider value={{
       user,
       setUser,
+      isShopkeeper,
       login,
       register,
       logout,
+      toggleShopkeeperAccount,
       isAuthModalOpen,
       setIsAuthModalOpen,
       authMode,

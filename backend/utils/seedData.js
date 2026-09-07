@@ -52,7 +52,34 @@ export const seedDatabase = async () => {
       ]
     });
 
-    console.log('Users created successfully');
+    const shopkeeperUser = await User.create({
+      name: 'Gupta Kirana & General Store',
+      email: 'shopkeeper@bigmarket.com',
+      password: '123456789',
+      role: 'shopkeeper',
+      phone: '+91 98765 11223',
+      coins: 800,
+      shopDetails: {
+        storeName: 'Gupta Kirana & General Store',
+        gstNumber: '27AAAAA0000A1Z5',
+        businessType: 'Kirana & Supermarket'
+      },
+      addresses: [
+        {
+          title: 'Store',
+          name: 'Ramesh Gupta (Proprietor)',
+          phone: '+91 98765 11223',
+          street: 'Shop No. 4, Market Yard, Sector 17',
+          apartment: 'Vashi',
+          city: 'Navi Mumbai',
+          state: 'Maharashtra',
+          zipCode: '400703',
+          isDefault: true
+        }
+      ]
+    });
+
+    console.log('Users created successfully (Admin, Customer & Shopkeeper)');
 
     // 2. Create Essential Categories
     const categoriesData = [

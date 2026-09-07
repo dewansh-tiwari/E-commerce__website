@@ -5,11 +5,17 @@ import Order from '../models/Order.js';
 import User from '../models/User.js';
 import Notification from '../models/Notification.js';
 import { protect, admin } from '../middleware/authMiddleware.js';
+import { getTrafficStats } from '../middleware/trafficManager.js';
 
 const router = express.Router();
 
 // Apply protect & admin middleware to all admin routes
 router.use(protect, admin);
+
+// Admin Live Website Traffic & Performance Monitoring
+router.get('/traffic', (req, res) => {
+  res.json(getTrafficStats());
+});
 
 // Admin Dashboard Summary Metrics
 router.get('/dashboard', async (req, res) => {
@@ -22,13 +28,14 @@ router.get('/dashboard', async (req, res) => {
     const totalOrders = await Order.countDocuments();
     const pendingOrders = await Order.countDocuments({ orderStatus: { $in: ['Order Placed', 'Confirmed', 'Preparing'] } });
     const totalCustomers = await User.countDocuments({ role: 'customer' });
+    const totalShopkeepers = await User.countDocuments({ role: 'shopkeeper' });
     const totalProducts = await Product.countDocuments();
 
     // Low stock items (stock <= 10)
     const lowStockProducts = await Product.find({ stock: { $lte: 10 } }).select('name brand category stock price images');
 
     // Recent orders
-    const recentOrders = await Order.find().sort({ createdAt: -1 }).limit(6).populate('user', 'name email');
+    const recentOrders = await Order.find().sort({ createdAt: -1 }).limit(6).populate('user', 'name email role');
 
     // Monthly / Daily chart data simulation
     const salesChartData = [
@@ -46,6 +53,7 @@ router.get('/dashboard', async (req, res) => {
       totalOrders,
       pendingOrders,
       totalCustomers,
+      totalShopkeepers,
       totalProducts,
       lowStockProducts,
       recentOrders,
@@ -148,10 +156,12 @@ router.put('/orders/:id/status', async (req, res) => {
   }
 });
 
-// Admin Customer Management
+// Admin Customer & Shopkeeper Management
 router.get('/users', async (req, res) => {
   try {
-    const users = await User.find({ role: 'customer' }).select('-password').sort({ createdAt: -1 });
+    const { role } = req.query;
+    const filter = role ? { role } : { role: { $in: ['customer', 'shopkeeper'] } };
+    const users = await User.find(filter).select('-password').sort({ createdAt: -1 });
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });

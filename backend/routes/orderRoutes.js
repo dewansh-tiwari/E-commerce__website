@@ -48,14 +48,41 @@ router.post('/', protect, async (req, res) => {
       });
     }
 
-    // 2. Generate unique Order ID
-    const orderId = 'ORD' + Math.floor(100000 + Math.random() * 900000);
+    // 2. Calculate Automatic Shopkeeper Tier Discounts
+    // Rule:
+    // If shopkeeper order > ₹9,999 => flat ₹1,599 OFF automatically
+    // If shopkeeper order > ₹2,999 => flat ₹500 OFF automatically
+    const isShopkeeper = req.user.role === 'shopkeeper' || req.body.isShopkeeperOrder;
+    let autoShopkeeperDiscount = 0;
 
-    // 3. Create initial tracking timeline
+    if (isShopkeeper) {
+      if (subtotal > 9999) {
+        autoShopkeeperDiscount = 1599;
+      } else if (subtotal > 2999) {
+        autoShopkeeperDiscount = 500;
+      }
+    }
+
+    const clientProvidedShopkeeperDiscount = Number(req.body.shopkeeperDiscount || 0);
+    const effectiveShopkeeperDiscount = Math.max(autoShopkeeperDiscount, clientProvidedShopkeeperDiscount);
+
+    // Total discount combines standard coupons/welcome offers + automatic shopkeeper discount
+    const totalDiscountAmount = Math.max(
+      Number(discountAmount || 0),
+      (Number(discountAmount || 0) + (effectiveShopkeeperDiscount > (discountAmount || 0) ? effectiveShopkeeperDiscount - (discountAmount || 0) : 0))
+    );
+
+    // 3. Generate unique Order ID
+    const orderId = (isShopkeeper ? 'B2B' : 'ORD') + Math.floor(100000 + Math.random() * 900000);
+
+    // 4. Create initial tracking timeline
     const timeline = [
-      { status: 'Order Placed', timestamp: new Date(), note: 'Order successfully received' },
+      { status: 'Order Placed', timestamp: new Date(), note: isShopkeeper ? 'Shopkeeper wholesale order received' : 'Order successfully received' },
       { status: 'Confirmed', timestamp: new Date(Date.now() + 60000), note: 'Verified by Store Manager' }
     ];
+
+    const finalCalculatedTotal = Math.max(0, subtotal - totalDiscountAmount - (coinsDiscount || 0) + (deliveryFee || 0) + (taxes || 0));
+    const effectiveTotalAmount = totalAmount || finalCalculatedTotal;
 
     const order = await Order.create({
       orderId,
@@ -68,29 +95,33 @@ router.post('/', protect, async (req, res) => {
       orderStatus: 'Confirmed',
       timeline,
       subtotal,
-      discountAmount: discountAmount || 0,
+      discountAmount: totalDiscountAmount,
+      shopkeeperDiscount: effectiveShopkeeperDiscount,
       deliveryFee: deliveryFee || 0,
       taxes: taxes || 0,
       coinsRedeemed: coinsRedeemed || 0,
       coinsDiscount: coinsDiscount || 0,
-      totalAmount,
+      totalAmount: effectiveTotalAmount,
       estimatedDeliveryTime: deliverySlot?.type === 'express' ? '20-30 minutes' : 'Scheduled'
     });
 
-    // 4. Deduct redeemed coins & award 10% cash-back coins!
+    // 5. Deduct redeemed coins & award cash-back coins (Shopkeepers get 7% coins cashback)
     const user = await User.findById(req.user._id);
     let newCoins = user.coins - (coinsRedeemed || 0);
-    const earnedCoins = Math.floor(totalAmount * 0.05); // 5% cashback in SuperCoins 🪙
+    const cashbackRate = isShopkeeper ? 0.07 : 0.05;
+    const earnedCoins = Math.floor(effectiveTotalAmount * cashbackRate);
     newCoins += earnedCoins;
 
     user.coins = Math.max(0, newCoins);
     await user.save();
 
-    // 5. Create Order Notification
+    // 6. Create Order Notification
     await Notification.create({
       user: req.user._id,
-      title: `Order #${orderId} Confirmed! 🎉`,
-      message: `Your order of ₹${totalAmount} is confirmed and will arrive in 20-30 mins. You earned ${earnedCoins} SuperCoins!`,
+      title: isShopkeeper ? `Wholesale Order #${orderId} Confirmed! 🏪` : `Order #${orderId} Confirmed! 🎉`,
+      message: isShopkeeper && effectiveShopkeeperDiscount > 0
+        ? `Wholesale order of ₹${effectiveTotalAmount} confirmed! Saved ₹${effectiveShopkeeperDiscount} with automatic shopkeeper discount. You earned ${earnedCoins} SuperCoins!`
+        : `Your order of ₹${effectiveTotalAmount} is confirmed and will arrive in 20-30 mins. You earned ${earnedCoins} SuperCoins!`,
       type: 'order'
     });
 

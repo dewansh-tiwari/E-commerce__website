@@ -8,7 +8,7 @@ const router = express.Router();
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, location } = req.body;
+    const { name, email, password, phone, location, role, storeName, gstNumber } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
@@ -27,7 +27,7 @@ router.post('/register', async (req, res) => {
     const addresses = [];
     if (location && (location.city || location.area || location.locality)) {
       addresses.push({
-        title: 'Home',
+        title: role === 'shopkeeper' ? 'Store' : 'Home',
         name,
         phone: phone || '',
         street: location.street || location.locality || 'Current Location',
@@ -39,20 +39,31 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    const assignedRole = role === 'shopkeeper' ? 'shopkeeper' : 'customer';
+
     const user = await User.create({
       name,
       email,
       password,
       phone: phone || '',
+      role: assignedRole,
+      shopDetails: {
+        storeName: storeName || (assignedRole === 'shopkeeper' ? `${name}'s Kirana Store` : ''),
+        gstNumber: gstNumber || ''
+      },
       addresses,
-      coins: 250 // Welcome bonus SuperCoins!
+      coins: assignedRole === 'shopkeeper' ? 500 : 250 // Extra welcome coins for shopkeepers!
     });
 
     // Create welcome notification
     await Notification.create({
       user: user._id,
-      title: 'Welcome to Big Market 👌! 🛒',
-      message: 'You have earned 250 welcome SuperCoins 🪙! Enjoy 15-minute grocery delivery.',
+      title: assignedRole === 'shopkeeper' 
+        ? 'Welcome Shopkeeper Partner! 🏪' 
+        : 'Welcome to Big Market 👌! 🛒',
+      message: assignedRole === 'shopkeeper'
+        ? 'Your Shopkeeper Wholesale account is active! Enjoy automatic ₹500 OFF above ₹2,999 and ₹1,599 OFF above ₹9,999.'
+        : 'You have earned 250 welcome SuperCoins 🪙! Enjoy 15-minute grocery delivery.',
       type: 'reward'
     });
 
@@ -61,6 +72,7 @@ router.post('/register', async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      shopDetails: user.shopDetails,
       coins: user.coins,
       addresses: user.addresses,
       token: generateToken(user._id)
@@ -86,6 +98,7 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        shopDetails: user.shopDetails,
         coins: user.coins,
         addresses: user.addresses,
         token: generateToken(user._id)
@@ -93,6 +106,50 @@ router.post('/login', async (req, res) => {
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Toggle / Upgrade account to Shopkeeper role
+router.post('/toggle-shopkeeper', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Toggle between shopkeeper and customer
+    const newRole = user.role === 'shopkeeper' ? 'customer' : 'shopkeeper';
+    user.role = newRole;
+
+    if (newRole === 'shopkeeper' && req.body.storeName) {
+      user.shopDetails = {
+        storeName: req.body.storeName,
+        gstNumber: req.body.gstNumber || user.shopDetails?.gstNumber || '',
+        businessType: req.body.businessType || 'Kirana & Retail Store'
+      };
+    } else if (newRole === 'shopkeeper' && !user.shopDetails?.storeName) {
+      user.shopDetails = {
+        storeName: `${user.name}'s Kirana Store`,
+        gstNumber: '',
+        businessType: 'Kirana & Retail Store'
+      };
+    }
+
+    await user.save();
+
+    res.json({
+      message: `Account role updated to ${newRole}`,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        shopDetails: user.shopDetails,
+        coins: user.coins,
+        addresses: user.addresses,
+        token: generateToken(user._id)
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Clock, CreditCard, ShieldCheck, CheckCircle2, ArrowRight, Coins, Plus, Sparkles, Building, Home, Briefcase, X, Loader2, Navigation, RefreshCw, Phone, User as UserIcon } from 'lucide-react';
+import { MapPin, Clock, CreditCard, ShieldCheck, CheckCircle2, ArrowRight, Coins, Plus, Sparkles, Building, Home, Briefcase, X, Loader2, Navigation, RefreshCw, Phone, User as UserIcon, Store } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { orderService, userService } from '../services/api';
@@ -21,6 +21,9 @@ export const CheckoutPage = () => {
     coinsDiscount,
     finalTotal,
     welcomeOffer,
+    isShopkeeper,
+    shopkeeperDiscount,
+    shopkeeperOffer,
     refreshOrderCount
   } = useCart();
 
@@ -124,7 +127,7 @@ export const CheckoutPage = () => {
 
       const selectedAddress = addresses[selectedAddressIndex] || addresses[0];
 
-      const discountAmount = (appliedCoupon && appliedCoupon.code !== 'WELCOME100' ? appliedCoupon.discountAmount : 0) + (welcomeOffer?.isApplied ? welcomeOffer.discountValue : 0);
+      const discountAmount = (appliedCoupon && appliedCoupon.code !== 'WELCOME100' ? appliedCoupon.discountAmount : 0) + (welcomeOffer?.isApplied ? welcomeOffer.discountValue : 0) + (shopkeeperDiscount || 0);
 
       const orderPayload = {
         items: cartItems,
@@ -133,6 +136,8 @@ export const CheckoutPage = () => {
         paymentMethod,
         subtotal,
         discountAmount,
+        shopkeeperDiscount: shopkeeperDiscount || 0,
+        isShopkeeperOrder: isShopkeeper,
         deliveryFee,
         taxes: taxesAndHandling,
         coinsRedeemed: redeemCoins,
@@ -375,6 +380,16 @@ export const CheckoutPage = () => {
                 <div className="flex justify-between text-emerald-800 font-extrabold bg-emerald-50 p-2 rounded-xl border border-emerald-200">
                   <span>First 3 Orders Welcome Discount (Order {welcomeOffer.currentOrderNumber}/3)</span>
                   <span>-₹{welcomeOffer.discountValue}</span>
+                </div>
+              )}
+
+              {shopkeeperDiscount > 0 && (
+                <div className="flex justify-between text-indigo-900 font-extrabold bg-indigo-50 p-2.5 rounded-xl border border-indigo-200">
+                  <span className="flex items-center gap-1.5">
+                    <Store className="w-4 h-4 text-indigo-600" />
+                    <span>Shopkeeper Wholesale Discount ({subtotal > 9999 ? '> ₹9,999' : '> ₹2,999'})</span>
+                  </span>
+                  <span>-₹{shopkeeperDiscount}</span>
                 </div>
               )}
 

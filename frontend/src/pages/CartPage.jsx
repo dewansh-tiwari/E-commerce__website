@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { 
   ShoppingBag, Trash2, ArrowRight, Tag, Sparkles, Plus, Minus, 
   ShieldCheck, Zap, Gift, CheckCircle2, Clock, MapPin, Check, 
-  ChevronRight, AlertCircle, Home, Truck, RefreshCw
+  ChevronRight, AlertCircle, Home, Truck, RefreshCw, Store
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -33,6 +33,11 @@ export const CartPage = () => {
     finalTotal,
     totalItemCount,
     welcomeOffer,
+    isShopkeeper,
+    isShopkeeperMode,
+    toggleShopkeeperMode,
+    shopkeeperDiscount,
+    shopkeeperOffer,
     totalSavings
   } = useCart();
 
@@ -507,6 +512,109 @@ export const CartPage = () => {
               </div>
             )}
 
+            {/* Shopkeeper Wholesale Privilege & Auto-Discount Card */}
+            <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white p-5 rounded-3xl border border-indigo-700/50 shadow-md space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-400 text-indigo-950 flex items-center justify-center font-black">
+                    <Store className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white tracking-wide">
+                      Shopkeeper Wholesale Deals
+                    </h4>
+                    <p className="text-[10px] text-indigo-200 font-semibold">
+                      {isShopkeeper ? 'Wholesale Partner Active' : 'Special B2B Bulk Order Benefits'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleShopkeeperMode}
+                  className={`text-[10px] font-black px-2.5 py-1 rounded-lg border transition ${
+                    isShopkeeper
+                      ? 'bg-amber-400 text-indigo-950 border-amber-400 hover:bg-amber-300'
+                      : 'bg-indigo-800/80 text-indigo-200 border-indigo-600 hover:bg-indigo-700'
+                  }`}
+                >
+                  {isShopkeeper ? '✓ Active' : '+ Activate'}
+                </button>
+              </div>
+
+              {/* Wholesale Rules & Current Status */}
+              {isShopkeeper ? (
+                <div className="space-y-2.5 pt-1">
+                  {shopkeeperOffer.tier === 2 ? (
+                    <div className="bg-emerald-500/20 border border-emerald-400/40 p-3 rounded-2xl flex items-center justify-between">
+                      <div className="text-xs">
+                        <span className="font-black text-amber-300 block">🎉 Super Wholesale Tier Unlocked!</span>
+                        <span className="text-[11px] text-emerald-200">Orders &gt; ₹9,999: Flat ₹1,599 OFF Applied!</span>
+                      </div>
+                      <span className="text-xs font-black bg-emerald-400 text-gray-950 px-2.5 py-1 rounded-full">
+                        -₹1,599 OFF
+                      </span>
+                    </div>
+                  ) : shopkeeperOffer.tier === 1 ? (
+                    <div className="space-y-2">
+                      <div className="bg-amber-400/20 border border-amber-400/40 p-3 rounded-2xl flex items-center justify-between">
+                        <div className="text-xs">
+                          <span className="font-black text-amber-300 block">✨ Tier 1 Unlocked: ₹500 OFF Applied!</span>
+                          <span className="text-[11px] text-amber-100">Orders &gt; ₹2,999 auto-discount</span>
+                        </div>
+                        <span className="text-xs font-black bg-amber-400 text-gray-950 px-2.5 py-1 rounded-full">
+                          -₹500 OFF
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-2.5 rounded-xl text-[11px] text-indigo-200 space-y-1">
+                        <div className="flex justify-between font-bold">
+                          <span>Upgrade to Super Tier (-₹1,599)</span>
+                          <span className="text-amber-300 font-extrabold">Add ₹{shopkeeperOffer.amountToTier2}</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-indigo-950 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all duration-500"
+                            style={{ width: `${shopkeeperOffer.progressToTier2}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-[11px] text-indigo-200">
+                        Add items worth <strong className="text-amber-300 font-black">₹{shopkeeperOffer.amountToTier1}</strong> more to get <strong className="text-white">₹500 OFF automatically</strong>!
+                      </p>
+                      <div className="w-full h-1.5 bg-indigo-950 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-400 to-emerald-400 rounded-full transition-all duration-500"
+                          style={{ width: `${shopkeeperOffer.progressToTier1}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-indigo-300 font-semibold">
+                        <span>Current: ₹{subtotal}</span>
+                        <span>Target: ₹3,000 for ₹500 OFF</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-[10px] text-indigo-300 border-t border-indigo-800/80 pt-2">
+                    <span>🛒 &gt;₹2,999 ➔ ₹500 OFF</span>
+                    <span>🏪 &gt;₹9,999 ➔ ₹1,599 OFF</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-indigo-200 space-y-1.5 pt-1">
+                  <p>
+                    Are you a Kirana or retail store owner? Click <strong>Activate</strong> to unlock automatic wholesale discounts:
+                  </p>
+                  <ul className="text-[10px] text-amber-300 space-y-0.5 font-bold">
+                    <li>• Orders above ₹2,999 ➔ Flat ₹500 OFF automatically</li>
+                    <li>• Orders above ₹9,999 ➔ Flat ₹1,599 OFF automatically</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
             {/* Coupons & Promo Vouchers */}
             <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-2xs space-y-3">
               <div className="flex items-center gap-2 text-xs font-black text-gray-900">
@@ -598,6 +706,16 @@ export const CartPage = () => {
                     <span>Welcome Discount (Order {welcomeOffer.currentOrderNumber}/3)</span>
                   </span>
                   <span>-₹{welcomeOffer.discountValue}</span>
+                </div>
+              )}
+
+              {shopkeeperDiscount > 0 && (
+                <div className="flex justify-between text-indigo-900 font-black bg-indigo-50 p-2.5 rounded-xl border border-indigo-200">
+                  <span className="flex items-center gap-1.5">
+                    <Store className="w-4 h-4 text-indigo-600" />
+                    <span>Shopkeeper Auto-Discount ({subtotal > 9999 ? '> ₹9,999' : '> ₹2,999'})</span>
+                  </span>
+                  <span>-₹{shopkeeperDiscount}</span>
                 </div>
               )}
 

@@ -15,25 +15,45 @@ import adminRoutes from './routes/adminRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import aiChatRoutes from './routes/aiChatRoutes.js';
 
+import compression from 'compression';
+import {
+  trafficTracker,
+  globalTrafficLimiter,
+  authRateLimiter,
+  orderRateLimiter,
+  catalogCacheControl,
+  getTrafficStats
+} from './middleware/trafficManager.js';
+
 dotenv.config();
 
 const app = express();
 
-// Enable CORS & JSON parsing
+// High-Traffic Optimizations: Response Compression & CORS
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/orders', orderRoutes);
+// Real-time Traffic Tracking & Global Rate Limiting
+app.use(trafficTracker);
+app.use('/api', globalTrafficLimiter);
+
+// Route-Specific Protection & Cache Controls
+app.use('/api/auth', authRateLimiter, authRoutes);
+app.use('/api/products', catalogCacheControl, productRoutes);
+app.use('/api/categories', catalogCacheControl, categoryRoutes);
+app.use('/api/orders', orderRateLimiter, orderRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/coupons', couponRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/location', locationRoutes);
 app.use('/api/ai-chat', aiChatRoutes);
+
+// Public Traffic Health & Status Check
+app.get('/api/traffic/status', (req, res) => {
+  res.json(getTrafficStats());
+});
 
 // Base Health Check Route
 app.get('/api/health', (req, res) => {

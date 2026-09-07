@@ -22,6 +22,27 @@ export const CartProvider = ({ children }) => {
   const [couponError, setCouponError] = useState('');
   const [redeemCoins, setRedeemCoins] = useState(0); // Coins user selected to redeem at checkout
   const [ordersPlacedCount, setOrdersPlacedCount] = useState(0);
+  const [isShopkeeperMode, setIsShopkeeperMode] = useState(() => {
+    return localStorage.getItem('freshkart_shopkeeper_mode') === 'true';
+  });
+
+  // Sync shopkeeper mode if user has shopkeeper role
+  useEffect(() => {
+    if (user?.role === 'shopkeeper') {
+      setIsShopkeeperMode(true);
+      localStorage.setItem('freshkart_shopkeeper_mode', 'true');
+    }
+  }, [user]);
+
+  const toggleShopkeeperMode = () => {
+    setIsShopkeeperMode(prev => {
+      const nextVal = !prev;
+      localStorage.setItem('freshkart_shopkeeper_mode', String(nextVal));
+      return nextVal;
+    });
+  };
+
+  const isShopkeeper = user?.role === 'shopkeeper' || isShopkeeperMode;
 
   // Sync cart to local storage
   useEffect(() => {
@@ -122,8 +143,39 @@ export const CartProvider = ({ children }) => {
   const originalSubtotal = cartItems.reduce((sum, item) => sum + ((item.originalPrice || item.price) * item.quantity), 0);
   const itemDiscount = originalSubtotal - subtotal;
 
+  // Automatic Shopkeeper Tiered Discounts
+  // Rule:
+  // - Subtotal > 9,999 => flat ₹1,599 OFF automatically
+  // - Subtotal > 2,999 => flat ₹500 OFF automatically
+  let shopkeeperDiscount = 0;
+  let shopkeeperTier = 0; // 0: none, 1: ₹500, 2: ₹1,599
+
+  if (isShopkeeper) {
+    if (subtotal > 9999) {
+      shopkeeperDiscount = 1599;
+      shopkeeperTier = 2;
+    } else if (subtotal > 2999) {
+      shopkeeperDiscount = 500;
+      shopkeeperTier = 1;
+    }
+  }
+
+  const shopkeeperOffer = {
+    isShopkeeper,
+    isShopkeeperMode,
+    tier: shopkeeperTier,
+    discountAmount: shopkeeperDiscount,
+    amountToTier1: Math.max(0, 3000 - subtotal),
+    amountToTier2: Math.max(0, 10000 - subtotal),
+    progressToTier1: Math.min(100, Math.round((subtotal / 3000) * 100)),
+    progressToTier2: subtotal <= 2999 ? 0 : Math.min(100, Math.round(((subtotal - 2999) / 7000) * 100)),
+    tier1Threshold: 2999,
+    tier1Discount: 500,
+    tier2Threshold: 9999,
+    tier2Discount: 1599
+  };
+
   // First 3 Orders Welcome Offer Logic
-  // Condition: First 3 orders get flat ₹100 off on order above ₹199, FREE Delivery, and FREE Handling charge!
   const isWelcomeEligible = ordersPlacedCount < 3;
   const isWelcomeApplied = isWelcomeEligible && subtotal > WELCOME_MIN_ORDER;
   const currentOrderNumber = Math.min(3, ordersPlacedCount + 1);
@@ -132,7 +184,7 @@ export const CartProvider = ({ children }) => {
 
   // Delivery Fee: Free if welcome offer applied, or if subtotal >= FREE_DELIVERY_THRESHOLD (299), or cart empty
   const standardDeliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD || subtotal === 0 ? 0 : 25;
-  const deliveryFee = isWelcomeApplied ? 0 : standardDeliveryFee;
+  const deliveryFee = (isWelcomeApplied || (isShopkeeper && subtotal > 2999)) ? 0 : standardDeliveryFee;
   const amountToFreeDelivery = Math.max(0, FREE_DELIVERY_THRESHOLD - subtotal);
 
   // Handling charge: Free if welcome offer applied, else standard ₹15
@@ -142,7 +194,6 @@ export const CartProvider = ({ children }) => {
   // Coupons discount
   let couponDiscount = 0;
   if (appliedCoupon) {
-    // If user explicitly entered WELCOME100, avoid double counting
     if (appliedCoupon.code === 'WELCOME100') {
       couponDiscount = 0;
     } else {
@@ -152,17 +203,17 @@ export const CartProvider = ({ children }) => {
 
   const coinsDiscount = Math.floor(redeemCoins / 10); // 10 coins = ₹1
 
-  // Final Total calculation
+  // Final Total calculation with Shopkeeper Automatic Discount
   const finalTotal = Math.max(
     0,
-    subtotal - welcomeDiscount - couponDiscount - coinsDiscount + deliveryFee + taxesAndHandling
+    subtotal - welcomeDiscount - shopkeeperDiscount - couponDiscount - coinsDiscount + deliveryFee + taxesAndHandling
   );
 
   const totalItemCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
   // Total savings breakdown
-  const welcomeOfferSavings = isWelcomeApplied ? (WELCOME_DISCOUNT_VALUE + 25 + 15) : 0; // ₹140 saved!
-  const totalSavings = itemDiscount + welcomeDiscount + couponDiscount + coinsDiscount + (isWelcomeApplied ? 40 : 0);
+  const welcomeOfferSavings = isWelcomeApplied ? (WELCOME_DISCOUNT_VALUE + 25 + 15) : 0;
+  const totalSavings = itemDiscount + welcomeDiscount + shopkeeperDiscount + couponDiscount + coinsDiscount + (isWelcomeApplied ? 40 : 0);
 
   const welcomeOffer = {
     isEligible: isWelcomeEligible,
@@ -244,6 +295,12 @@ export const CartProvider = ({ children }) => {
       totalItemCount,
       welcomeOffer,
       welcomeDiscount,
+      isShopkeeper,
+      isShopkeeperMode,
+      setIsShopkeeperMode,
+      toggleShopkeeperMode,
+      shopkeeperDiscount,
+      shopkeeperOffer,
       totalSavings,
       refreshOrderCount: fetchOrderEligibility
     }}>
