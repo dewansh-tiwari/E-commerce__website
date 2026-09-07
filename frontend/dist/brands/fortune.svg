@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <path d="M 25,20 L 175,20 L 165,60 L 35,60 Z" fill="#D50000"/>
+  <text x="100" y="47" font-family="'Times New Roman', Georgia, serif" font-size="26" font-weight="900" font-style="italic" fill="#FFD700" text-anchor="middle" letter-spacing="1">fortune</text>
+  <text x="100" y="57" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="2">FOODS</text>
+</svg>

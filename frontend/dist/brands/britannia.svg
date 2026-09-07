@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <rect x="20" y="14" width="160" height="52" rx="10" fill="#D32F2F" stroke="#388E3C" stroke-width="3"/>
+  <text x="100" y="48" font-family="'Arial Black', Impact, sans-serif" font-size="24" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">BRITANNIA</text>
+  <text x="100" y="60" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#FFE082" text-anchor="middle" letter-spacing="0.5">Eat Healthy, Think Better</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <path d="M 50,15 L 150,15 C 150,55 100,68 100,68 C 100,68 50,55 50,15 Z" fill="#D32F2F" stroke="#FFD700" stroke-width="2"/>
+  <text x="100" y="45" font-family="'Arial Black', sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" text-anchor="middle">MDH</text>
+  <text x="100" y="57" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#FFD700" text-anchor="middle">ASLI MASALE</text>
+</svg>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <!-- Puma leaping cat silhouette -->
+  <path d="M 130 18 C 126 18 122 21 125 24 C 127 26 131 24 135 25 C 139 27 141 31 146 30 C 151 28 153 22 150 18 C 145 14 134 16 130 18 Z M 140 27 C 135 29 130 33 125 38 C 120 42 116 43 113 46 C 110 49 112 51 115 50 C 120 48 126 44 132 40 C 137 36 142 32 147 31 C 152 30 157 32 160 30 C 162 28 160 25 156 26 C 151 27 145 26 140 27 Z" fill="#111111"/>
+  <text x="68" y="54" font-family="'Arial Black', Impact, sans-serif" font-size="34" font-weight="900" fill="#111111" letter-spacing="2">PUMA</text>
+</svg>

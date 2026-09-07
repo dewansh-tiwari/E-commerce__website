@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <polygon points="100,14 175,65 25,65" fill="#D32F2F"/>
+  <text x="100" y="55" font-family="'Trebuchet MS', 'Arial Black', sans-serif" font-size="18" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">EVEREST</text>
+</svg>

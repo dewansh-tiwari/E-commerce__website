@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <circle cx="45" cy="40" r="24" fill="#00838F"/>
+  <text x="45" y="46" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">🥛</text>
+  <text x="125" y="38" font-family="'Trebuchet MS', Arial, sans-serif" font-size="16" font-weight="900" fill="#00838F" text-anchor="middle">MOTHER</text>
+  <text x="125" y="56" font-family="'Trebuchet MS', Arial, sans-serif" font-size="17" font-weight="900" fill="#00838F" text-anchor="middle">DAIRY</text>
+</svg>

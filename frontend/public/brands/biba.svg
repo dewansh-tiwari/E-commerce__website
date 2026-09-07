@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <path d="M 94 22 C 97 18 103 18 106 22 C 103 26 97 26 94 22 Z" fill="#D81B60"/>
+  <circle cx="100" cy="18" r="2.5" fill="#F59E0B"/>
+  <text x="100" y="52" font-family="'Didot', 'Playfair Display', serif" font-size="30" font-weight="900" fill="#9D174D" text-anchor="middle" letter-spacing="4">BIBA</text>
+  <text x="100" y="66" font-family="'Trebuchet MS', sans-serif" font-size="8" font-weight="700" fill="#F59E0B" text-anchor="middle" letter-spacing="2">REAL INDIAN FASHION</text>
+</svg>

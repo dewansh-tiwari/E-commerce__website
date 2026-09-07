@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <text x="100" y="52" font-family="'Trebuchet MS', 'Arial Black', sans-serif" font-size="44" font-weight="900" fill="#D32F2F" text-anchor="middle" letter-spacing="-1">Amul</text>
+  <text x="100" y="68" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#1565C0" text-anchor="middle" letter-spacing="1">The Taste of India</text>
+</svg>

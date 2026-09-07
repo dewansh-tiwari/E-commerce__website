@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <rect x="20" y="16" width="160" height="48" rx="8" fill="#B71C1C"/>
+  <text x="100" y="45" font-family="'Trebuchet MS', Arial, sans-serif" font-size="20" font-weight="900" fill="#FFD54F" text-anchor="middle">AASHIRVAAD</text>
+  <text x="100" y="58" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">SHUDDH CHAKKI ATTA</text>
+</svg>

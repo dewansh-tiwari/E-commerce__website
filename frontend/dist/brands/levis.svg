@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <!-- Levi's Batwing Shape -->
+  <path d="M 24 16 L 176 16 L 176 54 C 150 54 135 66 100 66 C 65 66 50 54 24 54 Z" fill="#C41230"/>
+  <text x="100" y="44" font-family="'Impact', 'Arial Black', sans-serif" font-size="28" font-weight="900" fill="#FFFFFF" text-anchor="middle" letter-spacing="1">LEVI'S</text>
+  <text x="135" y="32" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF">®</text>
+</svg>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <path d="M 40 44 L 50 24 L 60 44 Z" fill="#DC2626"/>
+  <path d="M 52 44 L 62 28 L 72 44 Z" fill="#991B1B"/>
+  <text x="126" y="47" font-family="'Arial Black', sans-serif" font-size="20" font-weight="900" fill="#111111" letter-spacing="0.5">WILDCRAFT</text>
+  <text x="126" y="58" font-family="Arial, sans-serif" font-size="7" font-weight="700" fill="#DC2626" letter-spacing="1">BORN FOR THE WILD</text>
+</svg>

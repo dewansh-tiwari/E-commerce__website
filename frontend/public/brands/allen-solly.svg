@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <rect width="200" height="80" rx="12" fill="#FFFFFF"/>
+  <circle cx="100" cy="24" r="10" fill="#1B4D3E"/>
+  <path d="M 97 18 L 100 28 L 103 18 M 94 20 L 100 24 L 106 20" stroke="#FFFFFF" stroke-width="1.5" fill="none"/>
+  <text x="100" y="52" font-family="'Times New Roman', Georgia, serif" font-size="20" font-weight="bold" fill="#1B4D3E" text-anchor="middle" letter-spacing="1">allen solly</text>
+  <text x="100" y="66" font-family="Arial, sans-serif" font-size="7" font-weight="700" fill="#888888" text-anchor="middle" letter-spacing="2">EST. 1744 • ENGLAND</text>
+</svg>
