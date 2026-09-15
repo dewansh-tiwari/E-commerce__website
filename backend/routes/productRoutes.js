@@ -1,30 +1,8 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
+import Product from '../models/Product.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
-
-// Helper to normalize product object for frontend compatibility (_id)
-const formatProduct = (p) => {
-  if (!p) return null;
-  return {
-    ...p,
-    _id: p.id,
-    originalPrice: Number(p.original_price),
-    discountPercent: p.discount_percent,
-    subCategory: p.sub_category,
-    keyFeatures: p.key_features,
-    dietaryTags: p.dietary_tags,
-    storageInfo: p.storage_info,
-    isOrganic: p.is_organic,
-    isVeg: p.is_veg,
-    isBestSeller: p.is_bestseller,
-    isTrending: p.is_trending,
-    isDeal: p.is_deal,
-    isFreshArrival: p.is_fresh_arrival,
-    reviewCount: p.review_count
-  };
-};
 
 // Get all products with rich filtering, search, sorting & pagination
 router.get('/', async (req, res) => {
@@ -46,82 +24,73 @@ router.get('/', async (req, res) => {
       limit = 24
     } = req.query;
 
-    let query = supabase.from('products').select('*', { count: 'exact' });
+    const query = {};
 
     if (category && category !== 'All') {
-      query = query.eq('category', category);
+      query.category = category;
     }
 
     if (subCategory) {
       const subCatArray = subCategory.split(',').map(s => s.trim()).filter(Boolean);
-      if (subCatArray.length > 0) {
-        query = query.in('sub_category', subCatArray);
-      }
+      query.subCategory = { $in: subCatArray.map(s => new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')) };
     }
 
-    if (search && search.trim()) {
-      const cleanSearch = search.trim();
-      let searchFilter = `name.ilike.%${cleanSearch}%,brand.ilike.%${cleanSearch}%,category.ilike.%${cleanSearch}%,description.ilike.%${cleanSearch}%`;
-      if (cleanSearch.toLowerCase().includes('coke')) {
-        searchFilter += `,brand.ilike.%Coca-Cola%`;
+    if (search) {
+      const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const flexiblePattern = escaped.replace(/[\s-]+/g, '[\\s-]+');
+      query.$or = [
+        { name: { $regex: flexiblePattern, $options: 'i' } },
+        { brand: { $regex: flexiblePattern, $options: 'i' } },
+        { category: { $regex: flexiblePattern, $options: 'i' } },
+        { subCategory: { $regex: flexiblePattern, $options: 'i' } },
+        { description: { $regex: flexiblePattern, $options: 'i' } }
+      ];
+      if (search.toLowerCase().includes('coke')) {
+        query.$or.push({ brand: { $regex: 'Coca-Cola', $options: 'i' } });
       }
-      if (cleanSearch.toLowerCase().includes('parle')) {
-        searchFilter += `,brand.ilike.%Parle%`;
+      if (search.toLowerCase().includes('parle')) {
+        query.$or.push({ brand: { $regex: 'Parle', $options: 'i' } });
       }
-      query = query.or(searchFilter);
     }
 
     if (brand) {
       const brandArray = brand.split(',').map(b => b.trim()).filter(Boolean);
-      if (brandArray.length > 0) {
-        query = query.in('brand', brandArray);
-      }
+      query.brand = { $in: brandArray.map(b => new RegExp(b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[\s-]+/g, '[\\s-]+'), 'i')) };
     }
 
     if (dietary) {
-      const tags = dietary.split(',').map(t => t.trim()).filter(Boolean);
-      if (tags.length > 0) {
-        query = query.overlaps('dietary_tags', tags);
-      }
+      const tags = dietary.split(',');
+      query.dietaryTags = { $in: tags };
     }
 
-    if (minPrice) query = query.gte('price', Number(minPrice));
-    if (maxPrice) query = query.lte('price', Number(maxPrice));
+    if (minPrice || maxPrice) {
+      query.price = {};
+      if (minPrice) query.price.$gte = Number(minPrice);
+      if (maxPrice) query.price.$lte = Number(maxPrice);
+    }
 
-    if (isDeal === 'true') query = query.eq('is_deal', true);
-    if (isTrending === 'true') query = query.eq('is_trending', true);
-    if (isBestSeller === 'true') query = query.eq('is_bestseller', true);
-    if (isFreshArrival === 'true') query = query.eq('is_fresh_arrival', true);
+    if (isDeal === 'true') query.isDeal = true;
+    if (isTrending === 'true') query.isTrending = true;
+    if (isBestSeller === 'true') query.isBestSeller = true;
+    if (isFreshArrival === 'true') query.isFreshArrival = true;
 
     // Sorting
-    if (sort === 'price-low') query = query.order('price', { ascending: true });
-    else if (sort === 'price-high') query = query.order('price', { ascending: false });
-    else if (sort === 'rating') query = query.order('rating', { ascending: false });
-    else if (sort === 'discount') query = query.order('discount_percent', { ascending: false });
-    else if (sort === 'newest') query = query.order('created_at', { ascending: false });
-    else query = query.order('is_bestseller', { ascending: false }).order('rating', { ascending: false });
+    let sortOptions = {};
+    if (sort === 'price-low') sortOptions = { price: 1 };
+    else if (sort === 'price-high') sortOptions = { price: -1 };
+    else if (sort === 'rating') sortOptions = { rating: -1 };
+    else if (sort === 'discount') sortOptions = { discountPercent: -1 };
+    else if (sort === 'newest') sortOptions = { createdAt: -1 };
+    else sortOptions = { isBestSeller: -1, rating: -1 }; // Popularity default
 
-    // Pagination
-    const pageNum = Math.max(1, Number(page));
-    const limitNum = Math.max(1, Number(limit));
-    const from = (pageNum - 1) * limitNum;
-    const to = from + limitNum - 1;
-
-    query = query.range(from, to);
-
-    const { data: rawProducts, count, error } = await query;
-
-    if (error) {
-      return res.status(500).json({ message: error.message });
-    }
-
-    const products = (rawProducts || []).map(formatProduct);
-    const total = count || 0;
+    const skip = (Number(page) - 1) * Number(limit);
+    const total = await Product.countDocuments(query);
+    const products = await Product.find(query).sort(sortOptions).skip(skip).limit(Number(limit));
 
     res.json({
       products,
-      page: pageNum,
-      pages: Math.ceil(total / limitNum) || 1,
+      page: Number(page),
+      pages: Math.ceil(total / Number(limit)),
       totalProducts: total
     });
   } catch (error) {
@@ -137,62 +106,35 @@ router.get('/search-suggestions', async (req, res) => {
       return res.json({ suggestions: [], products: [], categories: [] });
     }
 
-    const cleanQ = q.trim();
-    const searchFilter = `name.ilike.%${cleanQ}%,brand.ilike.%${cleanQ}%,category.ilike.%${cleanQ}%,sub_category.ilike.%${cleanQ}%`;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const flexiblePattern = escaped.replace(/[\s-]+/g, '[\\s-]+');
+    const regex = new RegExp(flexiblePattern, 'i');
 
-    const { data: matchedProducts } = await supabase
-      .from('products')
-      .select('id, name, brand, category, price, original_price, images, weight, rating, stock, sizes')
-      .or(searchFilter)
-      .limit(8);
+    const products = await Product.find({
+      $or: [{ name: regex }, { brand: regex }, { category: regex }, { subCategory: regex }]
+    }).limit(8).select('name brand category price originalPrice images weight rating stock sizes');
 
-    const products = (matchedProducts || []).map(formatProduct);
-
-    // Categories and brands
-    const categoriesSet = new Set(products.map(p => p.category).filter(Boolean));
-    const brandsSet = new Set(products.map(p => p.brand).filter(Boolean));
+    const matchingCategories = await Product.distinct('category', { category: regex });
+    const matchingBrands = await Product.distinct('brand', { brand: regex });
 
     res.json({
       products,
-      categories: Array.from(categoriesSet).slice(0, 4),
-      brands: Array.from(brandsSet).slice(0, 4)
+      categories: matchingCategories.slice(0, 4),
+      brands: matchingBrands.slice(0, 4)
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Get single product by ID (including reviews)
+// Get single product by ID
 router.get('/:id', async (req, res) => {
   try {
-    const { data: product, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', req.params.id)
-      .single();
-
-    if (error || !product) {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
       return res.status(404).json({ message: 'Product not found' });
     }
-
-    // Fetch reviews for this product
-    const { data: reviews } = await supabase
-      .from('product_reviews')
-      .select('*')
-      .eq('product_id', req.params.id)
-      .order('created_at', { ascending: false });
-
-    const formattedReviews = (reviews || []).map(r => ({
-      userName: r.user_name,
-      rating: r.rating,
-      comment: r.comment,
-      date: r.created_at
-    }));
-
-    res.json({
-      ...formatProduct(product),
-      reviews: formattedReviews
-    });
+    res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -202,50 +144,27 @@ router.get('/:id', async (req, res) => {
 router.post('/:id/reviews', protect, async (req, res) => {
   try {
     const { rating, comment } = req.body;
-    if (!rating || !comment) {
-      return res.status(400).json({ message: 'Rating and comment are required' });
+    const product = await Product.findById(req.params.id);
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' });
     }
 
-    // Insert review
-    const { error: insertError } = await supabase
-      .from('product_reviews')
-      .insert({
-        product_id: req.params.id,
-        user_id: req.user.id,
-        user_name: req.user.name,
-        rating: Number(rating),
-        comment
-      });
+    const review = {
+      userName: req.user.name,
+      rating: Number(rating),
+      comment,
+      date: new Date()
+    };
 
-    if (insertError) {
-      return res.status(500).json({ message: insertError.message });
-    }
+    product.reviews.push(review);
+    product.reviewCount = product.reviews.length;
+    product.rating = Number(
+      (product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length).toFixed(1)
+    );
 
-    // Fetch updated product
-    const { data: updatedProduct } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', req.params.id)
-      .single();
-
-    const { data: reviews } = await supabase
-      .from('product_reviews')
-      .select('*')
-      .eq('product_id', req.params.id)
-      .order('created_at', { ascending: false });
-
-    res.status(201).json({
-      message: 'Review added successfully',
-      product: {
-        ...formatProduct(updatedProduct),
-        reviews: (reviews || []).map(r => ({
-          userName: r.user_name,
-          rating: r.rating,
-          comment: r.comment,
-          date: r.created_at
-        }))
-      }
-    });
+    await product.save();
+    res.status(201).json({ message: 'Review added successfully', product });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

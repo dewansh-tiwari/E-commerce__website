@@ -2,6 +2,7 @@ import express from 'express';
 
 const router = express.Router();
 
+// Mock database of serviceable pincodes and dark store hubs
 const serviceablePincodes = {
   '400050': { city: 'Mumbai', area: 'Bandra West', estTime: '15-20 Mins', storeHub: 'Big Market 👌 Bandra Hub #04', isAvailable: true },
   '400051': { city: 'Mumbai', area: 'BKC, Bandra East', estTime: '15-25 Mins', storeHub: 'Big Market 👌 BKC Hub #02', isAvailable: true },
@@ -17,11 +18,11 @@ const serviceablePincodes = {
 router.post('/check-pincode', (req, res) => {
   try {
     const { pincode } = req.body;
-    if (!pincode || String(pincode).trim().length !== 6) {
+    if (!pincode || pincode.trim().length !== 6) {
       return res.status(400).json({ message: 'Please enter a valid 6-digit Indian Pincode (e.g. 400050)' });
     }
 
-    const cleanPincode = String(pincode).trim();
+    const cleanPincode = pincode.trim();
     const logisticsInfo = serviceablePincodes[cleanPincode];
 
     if (logisticsInfo) {
@@ -38,7 +39,7 @@ router.post('/check-pincode', (req, res) => {
       res.json({
         servicable: false,
         pincode: cleanPincode,
-        message: 'Currently not serviceable for 15-min delivery. Standard 2-day delivery available.'
+        message: `Currently not serviceable for 15-min delivery. Standard 2-day delivery available.`
       });
     }
   } catch (error) {

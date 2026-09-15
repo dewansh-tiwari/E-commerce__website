@@ -1,35 +1,26 @@
 import express from 'express';
-import { supabase } from '../config/supabase.js';
+import Category from '../models/Category.js';
+import Product from '../models/Product.js';
 
 const router = express.Router();
 
 // Get all categories with updated product counts
 router.get('/', async (req, res) => {
   try {
-    const { data: categories, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (error) return res.status(500).json({ message: error.message });
-
-    // Compute dynamic item counts from products table
-    const categoriesWithCount = await Promise.all(
-      (categories || []).map(async (cat) => {
-        const { count } = await supabase
-          .from('products')
-          .select('*', { count: 'exact', head: true })
-          .eq('category', cat.name);
-
+    const categories = await Category.find().sort({ name: 1 });
+    
+    // Dynamically calculate counts if needed
+    const updatedCategories = await Promise.all(
+      categories.map(async (cat) => {
+        const count = await Product.countDocuments({ category: cat.name });
         return {
-          ...cat,
-          _id: cat.id,
-          itemCount: count !== null ? count : (cat.item_count || 0)
+          ...cat.toObject(),
+          itemCount: count
         };
       })
     );
 
-    res.json(categoriesWithCount);
+    res.json(updatedCategories);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

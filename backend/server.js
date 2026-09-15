@@ -1,9 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import compression from 'compression';
-
-import { checkSupabaseConnection } from './config/supabase.js';
+import { connectDB } from './config/db.js';
+import { seedDatabase } from './utils/seedData.js';
 
 import authRoutes from './routes/authRoutes.js';
 import productRoutes from './routes/productRoutes.js';
@@ -16,6 +15,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import locationRoutes from './routes/locationRoutes.js';
 import aiChatRoutes from './routes/aiChatRoutes.js';
 
+import compression from 'compression';
 import {
   trafficTracker,
   globalTrafficLimiter,
@@ -56,24 +56,8 @@ app.get('/api/traffic/status', (req, res) => {
 });
 
 // Base Health Check Route
-app.get('/api/health', async (req, res) => {
-  const dbHealth = await checkSupabaseConnection();
-  res.json({
-    status: 'OK',
-    app: 'Big Market 👌 Grocery API (Supabase Edition)',
-    database: dbHealth.connected ? 'Connected' : 'Not Connected (Check backend/.env)',
-    dbDetails: dbHealth.message,
-    timestamp: new Date()
-  });
-});
-
-// Root friendly welcome
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Welcome to Big Market 👌 REST API Server (Supabase Powered)',
-    documentation: '/api/health',
-    status: 'Running'
-  });
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', app: 'Big Market 👌 Grocery API', timestamp: new Date() });
 });
 
 // Error handling middleware
@@ -84,20 +68,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Initialize Server
+// Initialize Server & Seed DB
 const startServer = async () => {
-  const dbStatus = await checkSupabaseConnection();
-  if (dbStatus.connected) {
-    console.log('✅ Supabase PostgreSQL connected successfully!');
-  } else {
-    console.log(`ℹ️ Supabase Connection Notice: ${dbStatus.message}`);
-  }
-
+  await connectDB();
+  await seedDatabase();
+  
   app.listen(PORT, () => {
     console.log(`🚀 Big Market 👌 Backend Server running on http://localhost:${PORT}`);
   });
 };
 
 startServer();
-
-export default app;
